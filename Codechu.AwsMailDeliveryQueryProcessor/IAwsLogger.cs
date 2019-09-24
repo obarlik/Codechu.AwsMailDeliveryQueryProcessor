@@ -8,7 +8,7 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
 {
     public interface IAwsLogger
     {
-        void LogError(int eventId, string message, Exception exception);
+        void LogError(int eventId, string message);
 
         void LogWarning(int eventId, string message);
 
@@ -16,8 +16,10 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
 
         void LogTrace(int eventId, string message);
 
-        void LogDebug(int eventId, string message);
+        void LogDebug(int eventId, string message, Exception exception);
 
         void LogCritical(int eventId, string message);
+
+        void TraceCall(string name, Action action, bool critical = default);
     }
 }

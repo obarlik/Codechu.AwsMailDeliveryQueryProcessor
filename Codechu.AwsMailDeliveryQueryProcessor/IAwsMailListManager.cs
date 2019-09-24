@@ -9,7 +9,6 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
     public interface IAwsMailListManager
     {
         void ProcessMailDelivery(
-            bool successful,
             string category,
             DateTime timestamp,
             string messageId,
