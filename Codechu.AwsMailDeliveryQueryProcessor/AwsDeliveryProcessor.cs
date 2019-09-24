@@ -161,8 +161,21 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
                             // or an unknown bounce.
 
                             foreach (var bounced in bounce.Bounce.BouncedRecipients)
-                                Logger.TraceCall($"ProcessMailBounce(MessageId:{messageId})", () =>
-                                    MailListManager.ProcessMailBounce(
+                                Logger.TraceCall($"ProcessMailHardBounce(MessageId:{messageId})", () =>
+                                    MailListManager.ProcessMailHardBounce(
+                                        $"Bounce/{bounce.Bounce.BounceType}/{bounce.Bounce.BounceSubType}",
+                                        bounce.Bounce.Timestamp,
+                                        messageId,
+                                        bounce.Mail.CommonHeaders.Subject,
+                                        bounced.EmailAddress,
+                                        $"DiagnosticCode: {bounced.DiagnosticCode}"));
+
+                            return;
+
+                        case "Transient":
+                            foreach (var bounced in bounce.Bounce.BouncedRecipients)
+                                Logger.TraceCall($"ProcessMailSoftBounce(MessageId:{messageId})", () =>
+                                    MailListManager.ProcessMailSoftBounce(
                                         $"Bounce/{bounce.Bounce.BounceType}/{bounce.Bounce.BounceSubType}",
                                         bounce.Bounce.Timestamp,
                                         messageId,
@@ -195,7 +208,16 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
                         messageId,
                         bounce.Mail.CommonHeaders.Subject,
                         bounced.EmailAddress,
-                        $"DiagnosticCode: {bounced.DiagnosticCode}"));
+                        $"DiagnosticCode: {bounced.DiagnosticCode}\n" +
+                        $"Message Headers:\n" +
+                        $"  Date = {bounce.Mail.CommonHeaders.Date}\n" +
+                        $"  ReplyTo = {bounce.Mail.CommonHeaders.ReplyTo}\n" +
+                        $"  From = {bounce.Mail.CommonHeaders.From}\n" +
+                        $"  To = {bounce.Mail.CommonHeaders.To}\n" +
+                        $"  Cc = {bounce.Mail.CommonHeaders.Cc}\n" +
+                        $"  Bcc = {bounce.Mail.CommonHeaders.Bcc}\n" +
+                        $"  Subject = {bounce.Mail.CommonHeaders.Subject}\n" +
+                        $"  {string.Join("\n  ", bounce.Mail.Headers.Select(h => $"{h.Name} = {h.Value}"))}\n"));
         }
 
 

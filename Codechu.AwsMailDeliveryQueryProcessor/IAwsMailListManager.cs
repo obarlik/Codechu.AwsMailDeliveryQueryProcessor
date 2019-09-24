@@ -15,7 +15,15 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
             string subject,
             string deliveredAddress);
 
-        void ProcessMailBounce(
+        void ProcessMailHardBounce(
+            string category,
+            DateTime timestamp,
+            string messageId,
+            string subject,
+            string bouncedAddress,
+            string details);
+
+        void ProcessMailSoftBounce(
             string category,
             DateTime timestamp,
             string messageId,
