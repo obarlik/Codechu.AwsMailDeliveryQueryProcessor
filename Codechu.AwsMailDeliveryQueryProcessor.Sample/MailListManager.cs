@@ -21,9 +21,11 @@ namespace Codechu.AwsMailDeliveryQueryProcessor.Sample
                  "}");
         }
 
+        public void ProcessMailHardBounce(string category, DateTime timestamp, string messageId, string subject, string email, string details)
+            => Emit("Hard bounce event to be processed.", category, timestamp, messageId, subject, email, details);
 
-        public void ProcessMailBounce(string category, DateTime timestamp, string messageId, string subject, string email, string details)
-            => Emit("Bounce event to be processed.", category, timestamp, messageId, subject, email, details);
+        public void ProcessMailSoftBounce(string category, DateTime timestamp, string messageId, string subject, string email, string details)
+            => Emit("Soft bounce event to be processed.", category, timestamp, messageId, subject, email, details);
 
         public void ProcessMailComplaint(string category, DateTime timestamp, string messageId, string subject, string complainedAddress)
             => Emit("Complaint event to be processed.", category, timestamp, messageId, subject, complainedAddress);
