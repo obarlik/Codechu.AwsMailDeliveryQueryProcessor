@@ -7,9 +7,17 @@ namespace Codechu.AwsMailDeliveryQueryProcessor.Sample
 {
     class MailListManager : IAwsMailListManager
     {
+        public IAwsLogger Logger { get; }
+
+        public MailListManager(IAwsLogger logger)
+        {
+            Logger = logger;
+        }
+
         public void Emit(string description, string category, DateTime timestamp, string messageId, string subject, string emailAddress, string details = "")
         {
-            Console.WriteLine(
+            Logger.LogInfo(
+                0,
                 $"{description} " +
                 $"{{\r\n" +
                 $"  Category  : {category}\r\n" +
