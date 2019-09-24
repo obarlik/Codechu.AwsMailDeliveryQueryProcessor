@@ -19,7 +19,5 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
         void LogDebug(int eventId, string message, Exception exception);
 
         void LogCritical(int eventId, string message);
-
-        void TraceCall(string name, Action action, bool critical = default);
     }
 }

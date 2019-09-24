@@ -21,7 +21,10 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
         public string DeliveryQueueName { get; }
         IAwsLogger Logger { get; }
 
+        public string OriginalMailIdHeaderName { get; }
+
         public AwsDeliveryProcessor(
+            string originalMailIdHeaderName,
             string awsAccessKeyId,
             string awsSecretAccessKey,
             string awsRegionName,
@@ -32,6 +35,7 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
             IAwsLogger logger, 
             IAwsMailListManager mailListManager)
         {
+            OriginalMailIdHeaderName = originalMailIdHeaderName;
             MailListManager = mailListManager;
             AwsAccessKeyId = awsAccessKeyId;
             AwsSecretAccessKey = awsSecretAccessKey;
@@ -93,6 +97,19 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
         }
 
 
+        string GetMessageId(AwsSesMail mail)
+        {
+            if (OriginalMailIdHeaderName != null)
+                return mail.Headers
+                        .Where(h => h.Name == OriginalMailIdHeaderName)
+                        .Select(h => h.Value)
+                        .FirstOrDefault()
+                    ?? mail.CommonHeaders.MessageId;
+
+            return mail.CommonHeaders.MessageId;
+        }
+
+
         private void ProcessQueuedDelivery(AmazonSQSClient client, Message message)
         {
             // First, convert the Amazon SNS message into a JSON object.
@@ -105,23 +122,14 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
 
             var messageId = GetMessageId(delivery.Mail);
 
-            Logger.TraceCall($"ProcessMailDelivery(MessageId:{messageId})", () =>
-                MailListManager.ProcessMailDelivery(
-                    "Delivery",
-                    delivery.Delivery.Timestamp,
-                    messageId,
-                    delivery.Mail.CommonHeaders.Subject,
-                    delivery.Delivery.Recipients));
-        }
-
-
-        string GetMessageId(AwsSesMail mail)
-        {
-            return mail.Headers
-                            .Where(h => h.Name == "X-BizMailId")
-                            .Select(h => h.Value)
-                            .FirstOrDefault()
-                ?? mail.CommonHeaders.MessageId;
+            foreach(var emailAddress in delivery.Delivery.Recipients)
+                Logger.TraceCall($"ProcessMailDelivery(MessageId:{messageId})", () =>
+                    MailListManager.ProcessMailDelivery(
+                        "Delivery",
+                        delivery.Delivery.Timestamp,
+                        messageId,
+                        delivery.Mail.CommonHeaders.Subject,
+                        emailAddress));
         }
 
 
@@ -136,7 +144,7 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
             var notification = Newtonsoft.Json.JsonConvert.DeserializeObject<AwsSqsNotification>(message.Body);
 
             Logger.LogTrace(0, "Deserializing bounce object.");
-            
+
             // Now access the Amazon SES bounce notification.
             var bounce = Newtonsoft.Json.JsonConvert.DeserializeObject<AwsSesBounceNotification>(notification.Message);
 
@@ -152,41 +160,42 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
                             // Remove all recipients that generated a permanent bounce 
                             // or an unknown bounce.
 
-                            Logger.TraceCall($"RemoveFromMailingList(MessageId:{messageId})", () =>
-                                MailListManager.RemoveFromMailingList(
-                                    $"Bounce/{bounce.Bounce.BounceType}/{bounce.Bounce.BounceSubType}",
-                                    bounce.Bounce.Timestamp,
-                                    messageId,
-                                    bounce.Mail.CommonHeaders.Subject,
-                                    bounce.Bounce.BouncedRecipients.Select(r => $"{r.EmailAddress} >> Action: {r.Action}, Status: {r.Status}, DiagnosticCode: {r.DiagnosticCode}")));
+                            foreach (var bounced in bounce.Bounce.BouncedRecipients)
+                                Logger.TraceCall($"ProcessMailBounce(MessageId:{messageId})", () =>
+                                    MailListManager.ProcessMailBounce(
+                                        $"Bounce/{bounce.Bounce.BounceType}/{bounce.Bounce.BounceSubType}",
+                                        bounce.Bounce.Timestamp,
+                                        messageId,
+                                        bounce.Mail.CommonHeaders.Subject,
+                                        bounced.EmailAddress,
+                                        $"DiagnosticCode: {bounced.DiagnosticCode}"));
 
-                            break;
+                            return;
 
-                        default:
-                            Logger.TraceCall($"ManuallyReviewEvent(MessageId:{messageId})", () =>
-                                MailListManager.ManuallyReviewEvent(
-                                    $"Bounce/{bounce.Bounce.BounceType}/{bounce.Bounce.BounceSubType}",
-                                    bounce.Bounce.Timestamp,
-                                    messageId,
-                                    bounce.Mail.CommonHeaders.Subject,
-                                    bounce.Bounce.BouncedRecipients.Select(r => $"{r.EmailAddress} >> Action: {r.Action}, Status: {r.Status}, DiagnosticCode: {r.DiagnosticCode}")));
+                        case "Suppressed":
+                            foreach (var emailAddress in bounce.Bounce.BouncedRecipients.Select(r => r.EmailAddress))
+                                Logger.TraceCall($"ProcessMailSuppression(MessageId:{messageId})", () =>
+                                    MailListManager.ProcessMailSuppression(
+                                        $"Bounce/{bounce.Bounce.BounceType}/{bounce.Bounce.BounceSubType}",
+                                        bounce.Bounce.Timestamp,
+                                        messageId,
+                                        bounce.Mail.CommonHeaders.Subject,
+                                        emailAddress));
 
-                            break;
+                            return;
                     }
                     break;
-
-
-                default:
-                    Logger.TraceCall($"ManuallyReviewEvent(MessageId:{messageId})", () =>
-                        MailListManager.ManuallyReviewEvent(
-                            $"Bounce/{bounce.Bounce.BounceType}/{bounce.Bounce.BounceSubType}",
-                            bounce.Bounce.Timestamp,
-                            messageId,
-                            bounce.Mail.CommonHeaders.Subject,
-                            bounce.Bounce.BouncedRecipients.Select(r => $"{r.EmailAddress} >> Action: {r.Action}, Status: {r.Status}, DiagnosticCode: {r.DiagnosticCode}")));
-
-                    break;
             }
+
+            foreach (var bounced in bounce.Bounce.BouncedRecipients)
+                Logger.TraceCall($"ProcessMailReview(MessageId:{messageId})", () =>
+                    MailListManager.ProcessMailReview(
+                        $"Bounce/{bounce.Bounce.BounceType}/{bounce.Bounce.BounceSubType}",
+                        bounce.Bounce.Timestamp,
+                        messageId,
+                        bounce.Mail.CommonHeaders.Subject,
+                        bounced.EmailAddress,
+                        $"DiagnosticCode: {bounced.DiagnosticCode}"));
         }
 
 
@@ -205,23 +214,19 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
             var complaint = Newtonsoft.Json.JsonConvert.DeserializeObject<AwsSesComplaintNotification>(notification.Message);
 
             var messageId = GetMessageId(complaint.Mail);
+            var timestamp = complaint.Complaint.Timestamp;
+            var subject = complaint.Mail.CommonHeaders.Subject;
 
             // Remove the email address that complained from our mailing list.
-            Logger.TraceCall($"RemoveFromMailingList(MessageId:{messageId})", () =>
-                MailListManager.RemoveFromMailingList(
-                    "Complaint",
-                    complaint.Complaint.Timestamp,
-                    messageId,
-                    complaint.Mail.CommonHeaders.Subject,
-                    complaint.Complaint.ComplainedRecipients.Select(r => r.EmailAddress)));
 
-            Logger.TraceCall($"ProcessMailDelivery(MessageId:{messageId})", () =>
-                MailListManager.ProcessMailDelivery(
-                    "Complaint",
-                    complaint.Complaint.Timestamp,
-                    messageId,
-                    complaint.Mail.CommonHeaders.Subject,
-                    complaint.Complaint.ComplainedRecipients.Select(r => r.EmailAddress)));
+            foreach (var complained in complaint.Complaint.ComplainedRecipients)
+                Logger.TraceCall($"ProcessMailComplaint(MessageId:{messageId})", () =>
+                    MailListManager.ProcessMailComplaint(
+                        "Complaint",
+                        complaint.Complaint.Timestamp,
+                        messageId,
+                        complaint.Mail.CommonHeaders.Subject,
+                        complained.EmailAddress));
         }
 
     }

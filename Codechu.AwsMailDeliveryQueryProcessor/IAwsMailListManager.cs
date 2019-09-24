@@ -13,20 +13,36 @@ namespace Codechu.AwsMailDeliveryQueryProcessor
             DateTime timestamp,
             string messageId,
             string subject,
-            IEnumerable<string> deliveredAddresses);
+            string deliveredAddress);
 
-        void RemoveFromMailingList(
+        void ProcessMailBounce(
             string category,
             DateTime timestamp,
-            string messageId, 
+            string messageId,
             string subject,
-            IEnumerable<string> bouncedAddresses);
+            string bouncedAddress,
+            string details);
 
-        void ManuallyReviewEvent(
+        void ProcessMailSuppression(
+            string category,
+            DateTime timestamp,
+            string messageId,
+            string subject,
+            string suppressedAddress);
+
+        void ProcessMailComplaint(
+            string category,
+            DateTime timestamp,
+            string messageId,
+            string subject,
+            string complainedAddress);
+
+        void ProcessMailReview(
             string category, 
             DateTime timestamp,
             string messageId,
             string subject,
-            IEnumerable<string> eventAddresses);
+            string eventAddress,
+            string details);
     }
 }
